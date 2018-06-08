@@ -1,0 +1,13 @@
+Contributors:
+
+ v9@fakehalo.us        - original author
+ rrt@sc3d.org          - rewrite, culminating in version 2
+ px@zeroday.net        - many ideas/suggestions, bug finding, and
+                         general helper.
+ komar@ukr.net         - came up with the idea/code that i made into the
+                         "nopipe" definition instruction.  also provided
+                         other misc. ideas.
+ jce@gmode.zeroday.net - found a bug when compiling the kernel, with the
+                         'make' definition file. (fixed in 1.0.5)
+ lapan_mv@inbox.ru     - found a bug in the calculation of memory to be
+                         allocated, which could cause a segfault.

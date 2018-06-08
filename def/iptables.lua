@@ -1,0 +1,6 @@
+match("highlight", "[%d%u%-]")
+match("lowlight", "[:%.]")
+match("lowlight", "%b`'")
+match("lowlight", "%b[]")
+match("lowlight", "%b()")
+match("highlight", "target  ")

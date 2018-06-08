@@ -1,0 +1,5 @@
+match("highlight", "^%s*%d+")
+match("warning", "root")
+match("highlight", "%b[]")
+match("highlight", "%b()")
+match("highlight", "%b{}")

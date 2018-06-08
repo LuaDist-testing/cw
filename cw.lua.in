@@ -1,0 +1,161 @@
+#!/bin/sh
+A=--[[ exec @LUA@ "$0" "$@"  # -*- mode: lua; -*- ]]A
+--
+-- cw (color wrapper)
+--
+-- Copyright (c) 2013 Reuben Thomas <rrt@sc3d.org>
+--
+-- This file is part of cw.
+--
+-- cw is free software; you can redistribute it and/or modify it
+-- under the terms of the GNU General Public License as published by
+-- the Free Software Foundation; either version 3, or (at your option)
+-- any later version.
+--
+-- cw is distributed in the hope that it will be useful, but
+-- WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+-- General Public License for more details.
+--
+-- You should have received a copy of the GNU General Public License
+-- along with cw; see the file COPYING.  If not, see
+-- <http://www.gnu.org/licenses/>. */
+
+
+spec = [[
+@PACKAGE@ @VERSION@
+
+Usage: cw [OPTION]... [FILE]...
+
+Not for direct use (see cw(1)).
+
+Options:
+
+      --help               display this help, then exit
+      --version            display version information, then exit
+]]
+
+-- Remove current directory from package.path
+package.path = package.path:gsub (";%./%?%.lua", ""):gsub ("^%./%?%.lua;", "")
+
+local std = require "std".monkey_patch ()
+local posix = require "posix"
+local colors = require "ansicolors"
+
+-- Filter a directory out of a PATH-like colon-separated path list.
+local function remove_dir_from_path(path, dir)
+  local canon_dir = posix.realpath (dir)
+  return std.table.concat (std.list.filter (function (s) return posix.realpath (s) ~= canon_dir end,
+                                    path:split (":")), ":")
+end
+
+-- Type to color map.
+local colormap = {}
+local function setcolors (str)
+  for ass in std.list.elems (str:split (":")) do
+    local class, col = unpack (ass:split ("="))
+    if not class or #class == 0 then
+      die ("class missing.")
+    end
+    if not col or #col == 0 then
+      die ("color missing.")
+    end
+    colormap[class] = colors.noReset ("%{reset " .. col .. "}")
+  end
+end
+
+-- Convert a lexical class to a color, defaulting to the color of the default class.
+local function class_to_color (class)
+  return colormap[class] or colormap["default"]
+end
+
+-- User-visible APIs
+local matches = std.list {}
+function match (class, regex)
+  std.table.insert (matches, {col = class_to_color (class), regex = regex})
+end
+
+-- Create a coloring array for a string.
+local function make_colors (s)
+  local cols = std.list.rep ({class_to_color ("default")}, #s) -- Fill color array with default color.
+  for m in matches:elems () do
+    for c in std.list.elems (s:finds (m.regex)) do
+      local from, to = unpack (c)
+      cols = cols:sub (1, from - 1) .. std.list.rep ({m.col}, to - from + 1) .. cols:sub (to + 1)
+    end
+  end
+ return cols
+end
+
+-- Color a string given a coloring array.
+local function apply_colors (s, color)
+  local r = ""
+  local col -- nil guarantees immediate change of color
+  for i = 1, #s do
+    if col ~= color[i] then
+      col = color[i]
+      r = r .. col
+    end
+    r = r .. s[i]
+  end
+  if col ~= "reset" then
+    r = r .. colors.noReset ("%{reset}")
+  end
+  return r
+end
+
+
+-- Parse command-line arguments
+local scrname = arg[1]
+local OptionParser = require "std.optparse"
+local parser = OptionParser (spec)
+_G.arg, opts = parser:parse (_G.arg)
+if not scrname then
+  parser:help ()
+end
+arg[0] = nil
+std.table.remove (arg, 1)
+command_arg = std.table.clone (arg)
+std.table.insert (command_arg, 1, posix.basename (scrname))
+
+posix.setenv ("PATH", remove_dir_from_path (os.getenv("PATH"), "@pkglibexecdir@"))
+
+setcolors ("default=reset") -- Ensure there is a "default" class
+setcolors (os.getenv ("CW_COLORS") or (os.getenv ("CW_INVERT") and
+  "default=black:highlight=bright magenta:lowlight=magenta:warning=bright blue:error=bright red" or
+  "default=white:highlight=bright green:lowlight=green:warning=bright yellow:error=bright red"))
+local nocolor = os.getenv("NOCOLOR") or os.getenv("TERM") == "dumb" -- read NOCOLOR before definition script
+
+-- Run definition script
+std.table.merge (arg, std.table.invert (arg)) -- add arguments as keys
+local ok, msg = pcall (dofile, scrname)
+if ok == false then
+  die ("error in definition file: " .. msg)
+end
+
+if not nocolor and posix.isatty (posix.STDOUT_FILENO) == 1 then
+  local orig_pid = posix.getpid ("pid")
+  posix.signal (posix.SIGINT,
+                function ()
+                  local pid = posix.getpid ("pid")
+                  if pid == orig_pid then
+                    posix.write (posix.STDOUT_FILENO, "\x1b[00m")
+                  end
+                  posix.signal (posix.SIGINT, "SIG_DFL")
+                  posix.kill (pid, posix.SIGINT)
+                end)
+  -- Take chunks of input, color it line by line, and write the result.
+  local buf = ""
+  for chunk in posix.pipeline_iterator ({command_arg}, posix.openpty) do
+    buf = buf .. chunk
+    local lines = buf:split ("\r\n")
+    buf = std.table.remove (lines)
+    std.list.map (function (s)
+                    posix.write (posix.STDOUT_FILENO, apply_colors (s, make_colors (s)) .. "\n")
+                  end,
+                  lines)
+  end
+else -- Run the command without coloring.
+  posix.execp (unpack (command_arg))
+  die ("could not run command: " .. scrname)
+end

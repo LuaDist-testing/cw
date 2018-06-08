@@ -1,0 +1,5 @@
+match("warning", "%d+%*")
+match("lowlight", "%b{}")
+match("lowlight", "%b[]")
+match("lowlight", "%b()")
+match("warning", "init")

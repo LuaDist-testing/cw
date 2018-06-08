@@ -1,0 +1,6 @@
+match("highlight", "%d")
+match("warning", "[<>,]")
+match("lowlight", "[%[%]%(%)%.:]")
+match("lowlight", "tcpdump")
+match("highlight", "tcp")
+match("highlight", "udp")

@@ -1,0 +1,2 @@
+match("lowlight", ":")
+match("highlight", "^[^:]+")
